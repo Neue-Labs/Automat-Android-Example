@@ -29,6 +29,9 @@ import com.neuelabs.neuelabsautomat.AutomatConnectionManager;
 import com.neuelabs.neuelabsautomat.AutomatDevice;
 import com.neuelabs.neuelabsautomat.automatservices.automatmotion.AutomatMotionData;
 import com.neuelabs.neuelabsautomat.automatservices.automatmotion.AutomatMotionHandler;
+import com.neuelabs.neuelabsautomat.automatservices.i2c.AutomatI2CCommand;
+import com.neuelabs.neuelabsautomat.automatservices.i2c.AutomatI2CResponse;
+import com.neuelabs.neuelabsautomat.automatservices.i2c.AutomatI2CResponseHandler;
 import com.neuelabs.neuelabsautomat.automatservices.oad.AutomatFirmwareVersionHandler;
 import com.neuelabs.neuelabsautomat.devices.AutomatBaseboard;
 import com.neuelabs.neuelabsautomat.devices.MemoryBoard;
@@ -152,6 +155,9 @@ public class MainActivity extends AppCompatActivity {
             if (!connectionManager.initialize()) {
                 finish();
             }
+            else {
+                mBluetoothAdapter.startLeScan(mLeScanCallback);
+            }
 
 
         }
@@ -194,31 +200,9 @@ public class MainActivity extends AppCompatActivity {
 
 
                     if (device.getName() != null) {
-                        //Log.d("Automat","Adv device with name: " + device.getName() + ", address: " + device.getAddress());
-                        StringBuilder sb = new StringBuilder();
-                        for (int i = 0; i < scanRecord.length; i++) {
+                        //Log.d(TAG,"Adv device with name: " + device.getName() + ", address: " + device.getAddress());
 
 
-                            sb.append(("0" + scanRecord[i]).toCharArray());
-                        }
-                        //printScanRecord(scanRecord);
-                        String msg = "payload = ";
-                        for (byte b : scanRecord)
-                            msg += String.format("%02x ", b);
-                        // Log.d("Automat","Scan record: " + msg);
-
-
-//                        if (device.getUuids() != null) {
-//                            Log.d("Automat","Parcel uuids");
-//                            for (ParcelUuid uuid : device.getUuids()) {
-//                                Log.d("Automat", "UUID: " + uuid.getUuid().toString());
-//                            }
-//
-//                        }
-//                        else
-//                            Log.d("Automat","Parcel uuids was null");
-                        //FFF0 -            02 01 06 03 02 f0 ff 0b 09
-                        // 1803 1802 1804 - 02 01 06 07 02 03 18 02 18 04 18 0f 09
 
                         if (device.getName().contains(DEVICE_NAME_AUTOMAT) && !connectingDevices.containsKey(device.getAddress())) {
 
@@ -234,9 +218,7 @@ public class MainActivity extends AppCompatActivity {
 
                         }
                     }
-                    else {
-                        //Log.d("Automat","Unknown named device with address: " + device.getAddress());
-                    }
+
 
                 }
 
@@ -247,12 +229,51 @@ public class MainActivity extends AppCompatActivity {
         public void didConnectAutomatDevice() {
            Log.d(TAG, "Did connect Automat device");
             if (mBaseboard.getConnectionState() == AutomatDevice.AutomatConnectionState.CONNECTED) {
-                mBaseboard.setMotionSensorODR(AutomatBaseboard.MotionSensorODRValue.NLAMotionLowPowerMode13Hz);
-                mBaseboard.registerAutomatMotionHandler(motionHandler);
+
+
+                testI2CRead();
+
             }
 
 
         }
+
+        public void testAccelerometer() {
+            mBaseboard.setMotionSensorODR(AutomatBaseboard.MotionSensorODRValue.NLAMotionLowPowerMode13Hz);
+            mBaseboard.registerAutomatMotionHandler(motionHandler);
+        }
+
+        public void testI2CRead() {
+
+            int address = 0x6A;
+            int[] writeCommands = {0x00,0x01};
+            int[] readCommands = {0x00};
+
+
+            AutomatI2CCommand write = new AutomatI2CCommand(address, writeCommands);
+            AutomatI2CCommand read = new AutomatI2CCommand(address,readCommands,1);
+            mBaseboard.performI2CCommand(read,mi2cHandler);
+            mBaseboard.performI2CCommand(write,mi2cHandler);
+            mBaseboard.performI2CCommand(read,mi2cHandler);
+
+        }
+
+        private AutomatI2CResponseHandler mi2cHandler = new AutomatI2CResponseHandler() {
+            @Override
+            public void onI2CResponse(AutomatI2CResponse response) {
+                Log.d(TAG,String.format("Did receive i2c resp: %02x", response.getResponse()[0] & 0xFF));
+            }
+
+            @Override
+            public void onI2CCommandSend(AutomatI2CCommand command) {
+                Log.d(TAG,String.format("Did send i2c command: %02x", command.getCommands()[0]));
+            }
+
+            @Override
+            public void onI2CCommandError(AutomatI2CCommand command) {
+                Log.d(TAG,String.format("Error sending i2c command: %02x", command.getCommands()[0]));
+            }
+        };
 
         @Override
         public void didDisconnectAutomatDevice(int i) {
